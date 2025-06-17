@@ -1,0 +1,6 @@
+--2025-06-09 09:24:13--  https://scontent.xx.fbcdn.net/m1/v/t6/An-tPiXhtjFu_KnO3KjjcMReWlc1m_oYKcpw7Bj7r0Oa32_oMYC-Frt17lRsjwBWNqRYJNsFKh_Xud4jNd6evmU.tar?_nc_gid
+Resolving scontent.xx.fbcdn.net (scontent.xx.fbcdn.net)... 157.240.0.6, 2a03:2880:f084:105:face:b00c:0:3
+Connecting to scontent.xx.fbcdn.net (scontent.xx.fbcdn.net)|157.240.0.6|:443... connected.
+HTTP request sent, awaiting response... 403 Forbidden
+2025-06-09 09:24:14 ERROR 403: Forbidden.
+

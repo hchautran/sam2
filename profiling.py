@@ -43,8 +43,28 @@ class ModuleProfiler:
     def get_results(self):
         results = defaultdict(str)
         for module in self.records.keys():
-            results[module] = f'{sum(self.records[module])/len(self.records[module])*1e6:.3f} ms'
+            results[module] = f'{sum(self.records[module])/len(self.records[module])*1000:.3f} ms'
         return results
+    
+    def get_profile_plot(self):
+        import squarify
+        import matplotlib.pyplot as plt
+        import numpy as np
+        sizes = [sum(self.records[module])/len(self.records[module])*1000 for module in self.records.keys()] 
+        labels = [module for module in self.records.keys()] 
+    
+        colors = plt.cm.Pastel1(np.linspace(0, 1, len(sizes)))
+        
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        
+        # Create treemap
+        squarify.plot(sizes=sizes, label=labels, color=colors, alpha=0.8, ax=ax)
+        ax.set_title('Module latency profile', fontsize=16, fontweight='bold')
+        ax.axis('off')
+        plt.tight_layout()
+        plt.savefig('module_latency_profile.png', dpi=300)
+        plt.show()
+
 
 
     def clear(self):
@@ -140,4 +160,13 @@ for out_frame_idx in range(0, len(frame_names), vis_frame_stride):
         show_mask(out_mask, plt.gca(), obj_id=out_obj_id)
 # %%
 print(profiler.get_results())
+profiler.get_profile_plot()
 profiler.clear()
+
+# %%
+
+
+
+
+
+# %%
