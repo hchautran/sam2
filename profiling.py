@@ -107,9 +107,8 @@ import numpy as  np
 from vis_utils import show_points, show_mask
 
 def add_prompt(
-    predictor:SAM2VideoPredictor, inference_state, points, ann_frame_idx:int=0, ann_obj_id:int=1, show_point:bool=False):
+    predictor:SAM2VideoPredictor, inference_state, points, labels, ann_frame_idx:int=0, ann_obj_id:int=1, show_point:bool=False):
 
-    labels = np.array([1, 1], np.int32)
     _, out_obj_ids, out_mask_logits = predictor.add_new_points_or_box(
         inference_state=inference_state,
         frame_idx=ann_frame_idx,
@@ -133,6 +132,7 @@ add_prompt(
     predictor=predictor,
     inference_state=inference_state,
     points=np.array([[210, 350], [250, 220]], dtype=np.float32),
+    labels=np.array([1, 1], np.int32),
     ann_frame_idx=0,
     ann_obj_id=1,
     show_point=True
@@ -161,11 +161,6 @@ for out_frame_idx in range(0, len(frame_names), vis_frame_stride):
 print(profiler.get_results())
 profiler.get_profile_plot()
 profiler.clear()
-
-# %%
-
-
-
 
 
 # %%
