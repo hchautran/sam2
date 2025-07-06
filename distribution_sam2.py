@@ -1,4 +1,3 @@
-from dill.tests.test_classdef import n
 # %% import os
 import math
 import torch
@@ -53,8 +52,8 @@ def get_activation_distribution(activations:np.ndarray, title:str) -> Distributi
 # Compute percentiles along the sample axis (axis=-1)
     activations = np.reshape(activations, (-1, activations.shape[-1]))
 
-    min= np.min(activations, axis=0)
-    max = np.max(activations, axis=0)
+    min_val= np.min(activations, axis=0)
+    max_val = np.max(activations, axis=0)
     mean= np.max(activations, axis=0)
     p1 = np.percentile(activations, 1, axis=0)
     p99 = np.percentile(activations, 99, axis=0)
@@ -65,21 +64,14 @@ def get_activation_distribution(activations:np.ndarray, title:str) -> Distributi
         n_channels=activations.shape[-1],
         dist_name=title,
         mean=mean,
-        min=min,
-        max=max,
+        min=min_val,
+        max=max_val,
         p1=p1,
         p99=p99,
         p25=p25,
         p75=p75
     )
 
-
-def plot_distribution(ax, values:np.ndarray, title:str):
-    sns.histplot(values, bins=30, kde=True, stat='density', color='black')
-    plt.xlabel('Value')
-    plt.ylabel('Frequency')
-    plt.title(title)
-    plt.show()
 
 def get_submodule_names(module:nn.Module)->dict:
     if isinstance(module, Hiera):
@@ -148,6 +140,7 @@ class ActivationObserver(ObserverBase):
         self.MEMORY_ATTENTION = 'Memory Attention'
         self.MASK_DECODER = 'Mask Decoder'
         self.MEMORY_ENCODER = 'Mask Encoder'
+        self.bins = 200
         self.name_dict= {
             self.IMAGE_ENCODER:  defaultdict(list),
             self.MEMORY_ATTENTION: defaultdict(list),
@@ -185,36 +178,56 @@ class ActivationObserver(ObserverBase):
             if len(self.name_dict[module_type].keys()) > 0:
                 for sub_model in self.name_dict[module_type]:
                     for layer_idx in layer_idxes:
-                        ObserverBase.dictionary['activation'][self.name_dict[module_type][sub_model][layer_idx]]=None
+                        ObserverBase.dictionary['activation'][self.name_dict[module_type][sub_model][layer_idx]]=torch.zeros((self.bins,)).cpu().detach().numpy()
 
-    def register_distribution_hook(self, model:nn.Module, min=-0.05, max=0.05, layer_idxes:List[int]=[0]):
-        # ObserverBase.dictionary['activation'] = {}
+    def register_tensor_distribution_hook(self, model:nn.Module, min=-0.05, max=0.05):
 
         def pre_hook(module, input, name):
-            # dist = get_activation_distribution(activations=input[0].cpu().detach().numpy(), title=name)
             input_tensor = input[0]
-            bins = torch.linspace(min, max, 200)
-
+            bins = torch.linspace(min, max, self.bins)
             hist = torch.histc(input_tensor.float(), bins=bins.shape[0], min=min, max=max)
-            if ObserverBase.dictionary['activation'][name] is None:
-                ObserverBase.dictionary['activation'][name] = hist.cpu().detach().numpy(),
-            else:
-                ObserverBase.dictionary['activation'][name] += hist.cpu().detach().numpy()
+            hist = (hist/hist.sum()).cpu().detach().numpy()
+            ObserverBase.dictionary['activation'][name] += hist
 
         def post_hook(module, input, output, name):
-            # dist = get_activation_distribution(activations=input[0].cpu().detach().numpy(), title=name)
             output_tensor = output
-            bins = torch.linspace(min, max, 200)
+            bins = torch.linspace(min, max, self.bins)
             hist = torch.histc(output_tensor.float(), bins=bins.shape[0], min=min, max=max)
-            if ObserverBase.dictionary['activation'][name] is None:
-                ObserverBase.dictionary['activation'][name] = hist.cpu().detach().numpy(),
-            else:
-                ObserverBase.dictionary['activation'][name] += hist.cpu().detach().numpy()
+            hist = (hist/hist.sum()).cpu().detach().numpy()
+            ObserverBase.dictionary['activation'][name] += hist
 
 
         for name, module in model.named_modules():
+            if isinstance(module, nn.Linear) and name in ObserverBase.dictionary['activation'].keys():
+                # module.register_forward_pre_hook(partial(pre_hook,name=name))
+                module.register_forward_hook(partial(post_hook,name=name))
 
-            if isinstance(module, nn.Linear) and name in self.dictionary['activation'].keys():
+    def register_token_distribution_hook(self, model:nn.Module)
+        def pre_hook(module, input, name):
+            pass
+
+        def post_hook(module, input, output, name):
+            pass
+
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear) and name in ObserverBase.dictionary['activation'].keys():
+                # module.register_forward_pre_hook(partial(pre_hook,name=name))
+                module.register_forward_hook(partial(post_hook,name=name))
+    
+    def register_channel_distribution_hook(self, model:nn.Module):
+
+        def pre_hook(module, input, name):
+            input_tensor = input[0].cpu().detach().numpy()
+            ObserverBase.dictionary['activation'][name]=get_activation_distribution( input_tensor, title=name )
+
+
+        def post_hook(module, input, output, name):
+            output_tensor = output.cpu().detach().numpy()
+            ObserverBase.dictionary['activation'][name]=get_activation_distribution( output_tensor, title=name )    
+
+
+        for name, module in model.named_modules():
+            if isinstance(module, nn.Linear) and name in ObserverBase.dictionary['activation'].keys():
                 # module.register_forward_pre_hook(partial(pre_hook,name=name))
                 module.register_forward_hook(partial(post_hook,name=name))
 
@@ -225,38 +238,76 @@ class ActivationObserver(ObserverBase):
 
 # %%
 #build model
-checkpoint = './checkpoints/sam2.1_hiera_large.pt'
-model_cfg = 'configs/sam2.1/sam2.1_hiera_l.yaml'
+checkpoint = './checkpoints/sam2.1_hiera_small.pt'
+model_cfg = 'configs/sam2.1/sam2.1_hiera_s.yaml'
 image_dir = './notebooks/images/truck.jpg'
 video_dir = './notebooks/videos/bedroom'
-video_predictor = build_sam2_video_predictor(model_cfg, checkpoint)
-sam2 = build_sam2(model_cfg, checkpoint)
-image_predictor = SAM2ImagePredictor(sam2)
-observer = ActivationObserver(module_list=(nn.Linear,))
-observer.init_activation_cache(sam2.image_encoder.trunk)
-# observer.init_activation_cache(sam2.memory_attention)
-# observer.init_activation_cache(sam2.memory_encoder)
-# observer.inference_video(predictor=predictor, show_video=True)
-min =-1.0
-max =1.0
-observer.register_distribution_hook(video_predictor, min=min, max=max)
-# observer.inference_image(predictor, show_image=False, image_dir=image_dir)
-observer.inference_video(predictor=video_predictor, show_video=False)
+def get_tensor_distribution(use_vid:bool, min=-2.0, max=2.0 ):
+    observer = ActivationObserver(module_list=(nn.Linear,))
+    min_val = -2.0
+    max_val = 2.0
+    if use_vid:
+        predictor = build_sam2_video_predictor(model_cfg, checkpoint)
+        observer.init_activation_cache(predictor.image_encoder.trunk, layer_idxes=[0,12])
+        observer.init_activation_cache(predictor.sam_mask_decoder, layer_idxes=[0])
+        observer.register_tensor_distribution_hook(predictor, min=min_val, max=max_val)
+        observer.inference_video(predictor=predictor, show_video=False)
+    else:
+        sam2 = build_sam2(model_cfg, checkpoint)
+        predictor = SAM2ImagePredictor(sam2)
+        observer.init_activation_cache(sam2.image_encoder.trunk, layer_idxes=[0,12])
+        observer.init_activation_cache(sam2.memory_attention, layer_idxes=[0,1])
+        observer.init_activation_cache(sam2.sam_mask_decoder, layer_idxes=[0])
+        observer.register_tensor_distribution_hook(predictor.model, min=min_val, max=max_val)
+        observer.inference_image(predictor=predictor, show_image=False)
+
+    names = list(ObserverBase.dictionary['activation'].keys())
+    plt.figure(figsize=(10, 6))
+    for i, name in enumerate(names):
+        bins = torch.linspace(min, max, observer.bins).numpy()
+        hist = ObserverBase.dictionary['activation'][name].squeeze()
+        plt.bar(bins, hist, width=(bins[1] - bins[0]).item(), alpha=0.6, label=name)
+        plt.title(name)
+        plt.show()
+    observer.clear_hook()
+    observer.clear_dict()
+
+
+def get_channel_distribution(use_vid:bool ):
+    observer = ActivationObserver(module_list=(nn.Linear,))
+    min_val = -2.0
+    max_val = 2.0
+    if use_vid:
+        predictor = build_sam2_video_predictor(model_cfg, checkpoint)
+        observer.init_activation_cache(predictor.image_encoder.trunk, layer_idxes=[0,12])
+        observer.init_activation_cache(predictor.sam_mask_decoder, layer_idxes=[0])
+        observer.register_channel_distribution_hook(predictor)
+        observer.inference_video(predictor=predictor, show_video=False)
+    else:
+        sam2 = build_sam2(model_cfg, checkpoint)
+        predictor = SAM2ImagePredictor(sam2)
+        observer.init_activation_cache(sam2.image_encoder.trunk, layer_idxes=[0,12])
+        observer.init_activation_cache(sam2.memory_attention, layer_idxes=[0,1])
+        observer.init_activation_cache(sam2.sam_mask_decoder, layer_idxes=[0])
+        observer.register_channel_distribution_hook(predictor.model)
+        observer.inference_image(predictor=predictor, show_image=False)
+
+    names = list(ObserverBase.dictionary['activation'].keys())
+    plt.figure(figsize=(10, 6))
+    for i, name in enumerate(names):
+        print(f"Distribution for {name}")
+        _, ax = plt.subplots(1,1, figsize=(10, 6))
+        ObserverBase.dictionary['activation'][name].plot_channel_distribution(ax)
+    observer.clear_hook()
+    observer.clear_dict()
+
+
+# %%
+# get_tensor_distribution(use_vid=True)
+get_channel_distribution(use_vid=False)
+
+
 # %%
 
-names = list(observer.linear_names.keys())
-plt.figure(figsize=(10, 6))
-axes, figs = plt.subplots(1, 4, figsize=(10, 6*len(names)))
-for i, name in enumerate(names):
-    bins = torch.linspace(min, max, 200).numpy()
-    hist = ObserverBase.dictionary['activation'][observer.linear_names[name]].squeeze()
-
-    plt.bar(bins, hist, width=(bins[1] - bins[0]).item(), alpha=0.6, label=name)
-plt.title('distribution')
-plt.show()
-
 # %%
-observer.clear_hook()
-observer.clear_dict()
 
-# %%
