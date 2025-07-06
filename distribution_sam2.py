@@ -202,7 +202,7 @@ class ActivationObserver(ObserverBase):
                 # module.register_forward_pre_hook(partial(pre_hook,name=name))
                 module.register_forward_hook(partial(post_hook,name=name))
 
-    def register_token_distribution_hook(self, model:nn.Module)
+    def register_token_distribution_hook(self, model:nn.Module):
         def pre_hook(module, input, name):
             pass
 
