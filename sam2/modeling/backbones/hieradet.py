@@ -57,6 +57,7 @@ class MultiScaleAttention(nn.Module):
         B, H, W, _ = x.shape
         # qkv with shape (B, H * W, 3, nHead, C)
         qkv = self.qkv(x).reshape(B, H * W, 3, self.num_heads, -1)
+
         # q, k, v with shape (B, H * W, nheads, C)
         q, k, v = torch.unbind(qkv, 2)
 
@@ -144,6 +145,9 @@ class MultiScaleBlock(nn.Module):
         if window_size > 0:
             H, W = x.shape[1], x.shape[2]
             x, pad_hw = window_partition(x, window_size)
+
+        if window_size ==0:
+            breakpoint()
 
         # Window Attention + Q Pooling (if stage change)
         x = self.attn(x)
