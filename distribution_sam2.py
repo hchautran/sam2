@@ -404,8 +404,9 @@ def get_tensor_density_distribution(use_vid:bool, min:float=2.0, max:float=2.0, 
 
 
 
+if __name__ == '__main__':
 # %%
-get_tensor_density_distribution(use_vid=False, layer_idxes=[6,12])
+    get_tensor_density_distribution(use_vid=False, layer_idxes=[6,12])
 
 
 # %%
